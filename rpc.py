@@ -1,3 +1,9 @@
+class Pt3di(object):
+
+    def __init__(self, x=0, y=0, z=0):
+        self.x = x
+        self.y = y
+        self.z = z
 
 
 class RPC(object):
@@ -18,8 +24,10 @@ class RPC(object):
     # Boundaries of RPC validity for geo space
     first_lon, first_lat, last_lon, last_lat, first_height, last_height = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     IS_INV_INI = False
+
     def __init__(self):
         pass
+
     def ReadRPB(self, filename):
         f = open(filename,'r')
         # Pass 6 lines
@@ -89,3 +97,41 @@ class RPC(object):
         self.inverse_samp_den_coef.append(float(line[:-3]))
         print(self.inverse_samp_den_coef)
         self.IS_INV_INI = True
+
+    def GenerateNormGrid(self,aGridSz):
+        aGridNorm = []
+        aZS = 2/aGridSz.z
+        aXS = 2/aGridSz.x
+        aYS = 2/aGridSz.y
+        for aR in range(aGridSz.x):
+            for aC in range(aGridSz.y):
+                for aH in range(aGridSz.z):
+                    aPt = Pt3di()
+                    aPt.x = aR*aXS -1
+                    aPt.y = aC*aYS -1
+                    aPt.z = aZS*aH -1
+                    aGridNorm.append(aPt)
+        return aGridNorm
+    def InverseRPCNorm(self, PgeoNorm):
+        X = PgeoNorm.x
+        Y = PgeoNorm.y
+        Z = PgeoNorm.z
+        vecteurD = [ 1, X, Y, Z, Y*X, X*Z, Y*Z, X*X, Y*Y, Z*Z, X*Y*Z, X*X*X, Y*Y*X, X*Z*Z, X*X*Y, Y*Y*Y, Y*Z*Z, X*X*Z, Y*Y*Z, Z*Z*Z ]
+        samp_den = 0.
+        samp_num = 0.
+        line_den = 0.
+        line_num = 0.
+        for i in range(20):
+            line_num += vecteurD[i] * self.inverse_line_num_coef[i]
+            line_den += vecteurD[i] * self.inverse_line_den_coef[i]
+            samp_num += vecteurD[i] * self.inverse_samp_num_coef[i]
+            samp_den += vecteurD[i] * self.inverse_samp_den_coef[i]
+        # Final computation
+        PimgNorm = Pt3di()
+        if ((samp_den != 0) and (line_den != 0)):
+            PimgNorm.x = (samp_num / samp_den)
+            PimgNorm.y = (line_num / line_den)
+            PimgNorm.z = PgeoNorm.z
+        else:
+            print("Computing error - denominator = 0")
+        return PimgNorm
