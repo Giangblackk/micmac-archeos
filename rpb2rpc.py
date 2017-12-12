@@ -8,6 +8,9 @@ def DigitalGlobe2Grid_main(aNameFile,targetSyst,altiMin, altiMax,nbLayers):
     stepCarto = 50.
     # Reading Inverse RPC, computing Direct RPC and setting up RPC object
     aRPC = RPC()
+    aRPC.ReadRPB(aNameFile)
+    print("RPB File read")
+    
 
 if __name__ == "__main__":
     aNameFile = "/media/mybutt/DATA/Skymapdev/data/semiglobalmatching/SV1-01_20171009_L1B0000169008_1109170084002_01-MUX1.rpb"
