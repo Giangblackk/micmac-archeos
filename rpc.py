@@ -1,3 +1,4 @@
+import numpy as np
 class Pt3di(object):
 
     def __init__(self, x=0, y=0, z=0):
@@ -42,7 +43,21 @@ class cSsBloc(object):
     def Intervale(self):
         return self.mInt
 
-class L2SysSurResol(object):
+class cGenSysSurResol(object):
+    mCstrAssumed = False
+    # Si mOptSym est true , c'est la partie "superieure" des matrice qui est remplie,
+    mOptSym = False
+    mGereNonSym = False
+    mGereBloc = False
+    mPhaseContrainte = False
+    mFirstEquation = False
+    def __init__(self,CstrAssumed, OptSym, GereNonSym, GereBloc):
+        self.mCstrAssumed = CstrAssumed
+        self.mOptSym = OptSym
+        self.mGereNonSym = GereNonSym
+        self.mGereBloc = GereBloc
+
+class L2SysSurResol(cGenSysSurResol):
     mNbVar = 0
     mtLi_Li = [] # Sigma des trans(Li) Li
     mDatatLi_Li = []
@@ -56,20 +71,32 @@ class L2SysSurResol(object):
     mNbEq = 0; # Debug
     mMaxBibi = 0.0; # Debug
 
+
     def __init__(self, aNbVar, IsSym=True):
-        mNbVar = aNbVar
+        DebugPbCondFaisceau = False
+        cGenSysSurResol.__init__(self, not DebugPbCondFaisceau, IsSym, not IsSym, True)
+        self.mNbVar = aNbVar
+        self.mDatabi_Li = np.zeros(aNbVar)
+        self.mDatatLi_Li = np.zeros((self.mNbVar,self.mNbVar))
+
 
     def V_GSSR_AddNewEquation_Indexe(self,
             aVSB, aFullCoef, aNbTot,
            aVInd, aPds, aCoeff, aB):
-           if aVSB:
-               aPB = aPds * aB
-               aNbBl = len(aVSB)
-               Y0InBloc =0
-               for aKBly in range(aNbBl):
-                   aBlY = aVSB[aKBly]
-                   aIntY = aBlY.Intervale()
-                   aNumBlocIntervY = aIntY.NumBlocSolve()
+        NbInd = len(aVInd)
+        for Ind1 in range(NbInd):
+            iVar1 = aVInd[Ind1]
+            aPCV1 = aPds * aCoeff[Ind1]
+            self.mDatabi_Li[iVar1] += aB * aPCV1
+            # Si mOptSym o n remplit la partie telle que  Ind2 >= Ind1
+            # donc x >= y, donc  partie "superieure"
+            aDebInd2 = Ind1 if self.mOptSym else 0
+            for Ind2 in range(aDebInd2, NbInd):
+                iVar2 = aVInd[Ind2]
+                self.mDatatLi_Li[iVar1][iVar2] += aPCV1 * aCoeff[Ind2]
+        self.mBibi += aPds * aB * aB
+        self.mMaxBibi = max(self.mMaxBibi, aPds * aB * aB)
+        self.mNbEq += 1
 
     def AddEquation(self, aPds, aCoeff, aB):
         VInd = []
@@ -78,7 +105,16 @@ class L2SysSurResol(object):
             if (aCoeff[iVar1] != 0.0): # Acceleration pour les formes creuses
                 VInd.append(iVar1)
                 VALS.append(aCoeff[iVar1])
-        self.V_GSSR_AddNewEquation_Indexe(0, 0, 0, VInd, aPds, VALS,aB)
+        self.V_GSSR_AddNewEquation_Indexe(0, 0, 0, VInd, aPds, VALS, aB)
+
+    def GSSR_Solve(self, aResOk):
+        return 0
+
+    def Solve(self, aResOk):
+        return 0
+
+    def V_GSSR_Solve(self, aResOk):
+        return self.Solve(aResOk)
 
 
 class RPC(object):
@@ -245,4 +281,21 @@ class RPC(object):
                 -lat*X, -lat*Y, -lat*Z, -lat*X*Y, -lat*X*Z, -lat*Y*Z, -lat*X*X, -lat*Y*Y, -lat*Z*Z, -lat*Y*X*Z, -lat*X*X*X, -lat*X*Y*Y, -lat*X*Z*Z, -lat*Y*X*X, -lat*Y*Y*Y, -lat*Y*Z*Z, -lat*X*X*Z, -lat*Y*Y*Z, -lat*Z*Z*Z
             ]
             aSysLat.AddEquation(1, aEqLat, lat)
- 
+        # Computing the result
+        Ok = False
+        aSolLon = aSysLon.GSSR_Solve(Ok)
+        aSolLat = aSysLat.GSSR_Solve(Ok)
+        aDataLat = aSolLat.data()
+        aDataLon = aSolLon.data()
+
+        # Copying Data in RPC object
+        # Numerators
+        for i in range(20):
+            self.direct_samp_num_coef.push_back(aDataLon[i])
+            self.direct_line_num_coef.push_back(aDataLat[i])
+        # Denominators (first one = 1)
+        self.direct_line_den_coef.push_back(1)
+        self.direct_samp_den_coef.push_back(1)
+        for i in range(20,39):
+            self.direct_samp_den_coef.push_back(aDataLon[i])
+            self.direct_line_den_coef.push_back(aDataLat[i])
